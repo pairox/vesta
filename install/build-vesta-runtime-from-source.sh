@@ -57,6 +57,17 @@ tar -xzf "$php_tar" -C "$build_root/src"
 
 nginx_prefix="$build_root/runtime/nginx"
 php_prefix="$build_root/runtime/php"
+multiarch="$(gcc -print-multiarch 2>/dev/null || true)"
+php_cppflags=""
+php_ldflags=""
+if [ -n "$multiarch" ]; then
+    if [ -d "/usr/include/$multiarch" ]; then
+        php_cppflags="-I/usr/include/$multiarch"
+    fi
+    if [ -d "/usr/lib/$multiarch" ]; then
+        php_ldflags="-L/usr/lib/$multiarch"
+    fi
+fi
 
 (
     cd "$build_root/src/nginx-$nginx_version"
@@ -77,7 +88,7 @@ fi
 
 (
     cd "$build_root/src/php-$php_version"
-    ./configure \
+    CPPFLAGS="$php_cppflags" LDFLAGS="$php_ldflags" ./configure \
         --prefix=/usr/local/vesta/php \
         --with-config-file-path=/usr/local/vesta/php/lib \
         --with-zlib \
@@ -88,7 +99,7 @@ fi
         --with-mysql=mysqlnd \
         --with-mysqli=mysqlnd \
         --with-pdo-mysql=mysqlnd \
-        --with-curl \
+        --with-curl=/usr \
         --enable-mbstring \
         --disable-debug
     make -j "$jobs" ZEND_EXTRA_LIBS='-lresolv'
