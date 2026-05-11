@@ -75,7 +75,9 @@ jobs:
                 zlib1g-dev
 
               JOBS="$(nproc)" ./install/build-vesta-runtime-from-source.sh dist/deb
-              dpkg-deb -I dist/deb/*.deb
+              for deb in dist/deb/*.deb; do
+                dpkg-deb -I "$deb"
+              done
             '
 
       - name: Upload deb artifacts
