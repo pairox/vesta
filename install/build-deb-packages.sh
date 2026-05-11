@@ -2,10 +2,20 @@
 set -euo pipefail
 
 version="${VESTA_DEB_VERSION:-1.0.0-10}"
-out_dir="${1:-dist/deb}"
-work_dir="${BUILD_DIR:-dist/build-deb}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 project_root="$(cd "$script_dir/.." && pwd)"
+out_dir="${1:-dist/deb}"
+work_dir="${BUILD_DIR:-dist/build-deb}"
+
+case "$out_dir" in
+    /*) ;;
+    *) out_dir="$project_root/$out_dir" ;;
+esac
+
+case "$work_dir" in
+    /*) ;;
+    *) work_dir="$project_root/$work_dir" ;;
+esac
 
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then

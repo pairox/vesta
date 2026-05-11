@@ -3,11 +3,21 @@ set -euo pipefail
 
 nginx_version="${NGINX_VERSION:-1.24.0}"
 php_version="${PHP_VERSION:-5.6.40}"
-out_dir="${1:-dist/deb}"
-build_root="${BUILD_ROOT:-dist/source-build}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 project_root="$(cd "$script_dir/.." && pwd)"
+out_dir="${1:-dist/deb}"
+build_root="${BUILD_ROOT:-dist/source-build}"
 jobs="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+
+case "$out_dir" in
+    /*) ;;
+    *) out_dir="$project_root/$out_dir" ;;
+esac
+
+case "$build_root" in
+    /*) ;;
+    *) build_root="$project_root/$build_root" ;;
+esac
 
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
