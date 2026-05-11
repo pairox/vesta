@@ -1,0 +1,84 @@
+name: Build Debian Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      nginx_version:
+        description: "Internal Vesta nginx version"
+        required: false
+        default: "1.24.0"
+      php_version:
+        description: "Internal Vesta PHP version"
+        required: false
+        default: "5.6.40"
+      deb_version:
+        description: "Debian package version"
+        required: false
+        default: "1.0.0-10"
+  push:
+    paths:
+      - ".github/workflows/build-deb.yml"
+      - "bin/**"
+      - "func/**"
+      - "install/**"
+      - "src/**"
+      - "upd/**"
+      - "web/**"
+
+jobs:
+  build-deb:
+    name: Build .deb on Debian 10
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build packages
+        env:
+          NGINX_VERSION: ${{ github.event.inputs.nginx_version || '1.24.0' }}
+          PHP_VERSION: ${{ github.event.inputs.php_version || '5.6.40' }}
+          VESTA_DEB_VERSION: ${{ github.event.inputs.deb_version || '1.0.0-10' }}
+        run: |
+          set -euxo pipefail
+          docker run --rm \
+            -e NGINX_VERSION="$NGINX_VERSION" \
+            -e PHP_VERSION="$PHP_VERSION" \
+            -e VESTA_DEB_VERSION="$VESTA_DEB_VERSION" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            debian:10 bash -lc '
+              set -euxo pipefail
+
+              printf "%s\n" \
+                "deb http://archive.debian.org/debian buster main" \
+                > /etc/apt/sources.list
+              printf "%s\n" "Acquire::Check-Valid-Until \"false\";" > /etc/apt/apt.conf.d/99no-check-valid
+
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                ca-certificates \
+                curl \
+                dpkg-dev \
+                gcc \
+                gnupg \
+                libcurl4-openssl-dev \
+                libpcre3-dev \
+                libssl-dev \
+                libxml2-dev \
+                make \
+                pkg-config \
+                rsync \
+                zlib1g-dev
+
+              JOBS="$(nproc)" ./install/build-vesta-runtime-from-source.sh dist/deb
+              dpkg-deb -I dist/deb/*.deb
+            '
+
+      - name: Upload deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vesta-debian10-debs
+          path: dist/deb/*.deb
+          if-no-files-found: error

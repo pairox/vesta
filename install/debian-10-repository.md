@@ -55,7 +55,84 @@ files/
 
 ## Publishing on GitHub Pages
 
-1. Build the Debian packages and put them into `dist/deb/`.
+1. Build or copy the Vesta runtime directories.
+
+On an existing Debian 9 Vesta server they are usually here:
+
+```text
+/usr/local/vesta/nginx
+/usr/local/vesta/php
+/usr/local/vesta/ioncube
+/usr/local/vesta/softaculous
+```
+
+The `vesta` package is built from this source tree. The other packages are
+built from those runtime directories:
+
+```bash
+apt-get install -y build-essential gcc rsync dpkg-dev apt-utils gnupg
+./install/build-deb-packages.sh dist/deb
+```
+
+If there is no existing Vesta server, build the internal runtime from source:
+
+```bash
+apt-get install -y build-essential gcc make curl ca-certificates rsync \
+    dpkg-dev apt-utils gnupg libpcre3-dev zlib1g-dev libssl-dev \
+    libcurl4-openssl-dev libxml2-dev
+
+./install/build-vesta-runtime-from-source.sh dist/deb
+```
+
+By default it builds:
+
+```text
+nginx 1.24.0
+PHP   5.6.40
+```
+
+You can override versions:
+
+```bash
+NGINX_VERSION=1.24.0 PHP_VERSION=5.6.40 \
+./install/build-vesta-runtime-from-source.sh dist/deb
+```
+
+## Building with GitHub Actions
+
+The workflow `.github/workflows/build-deb.yml` builds the packages inside a
+Debian 10 Docker container.
+
+Manual run:
+
+1. Open `Actions`.
+2. Select `Build Debian Packages`.
+3. Click `Run workflow`.
+4. Keep defaults or set versions:
+   - `nginx_version`: `1.24.0`
+   - `php_version`: `5.6.40`
+   - `deb_version`: `1.0.0-10`
+5. Download the `vesta-debian10-debs` artifact from the finished workflow run.
+
+The artifact contains the `.deb` files that should be copied to `dist/deb/`
+before publishing the APT repository:
+
+```bash
+mkdir -p dist/deb
+unzip vesta-debian10-debs.zip -d dist/deb
+SIGNING_KEY_ID=<your-gpg-key-id> ./install/build-github-pages-apt-repo.sh dist/deb docs
+```
+
+If the runtime directories are not in `/usr/local/vesta`, pass them explicitly:
+
+```bash
+VESTA_NGINX_DIR=/path/to/nginx \
+VESTA_PHP_DIR=/path/to/php \
+VESTA_IONCUBE_DIR=/path/to/ioncube \
+VESTA_SOFTACULOUS_DIR=/path/to/softaculous \
+./install/build-deb-packages.sh dist/deb
+```
+
 2. Create or select a GPG key for signing the APT repository.
 3. Run:
 
