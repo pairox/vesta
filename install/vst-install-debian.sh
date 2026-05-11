@@ -7,18 +7,48 @@
 #----------------------------------------------------------#
 export PATH=$PATH:/sbin
 export DEBIAN_FRONTEND=noninteractive
-RHOST='apt.vestacp.com'
-CHOST='c.vestacp.com'
+RHOST="${RHOST:-${VESTA_RHOST:-apt.vestacp.com}}"
+CHOST="${CHOST:-${VESTA_CHOST:-c.vestacp.com}}"
 VERSION='debian'
 VESTA='/usr/local/vesta'
 memory=$(grep 'MemTotal' /proc/meminfo |tr ' ' '\n' |grep [0-9])
 arch=$(uname -i)
 os='debian'
-release=$(cat /etc/debian_version|grep -o [0-9]|head -n1)
-codename="$(cat /etc/os-release |grep VERSION= |cut -f 2 -d \(|cut -f 1 -d \))"
+if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    release="${VERSION_ID%%.*}"
+    codename="$VERSION_CODENAME"
+fi
+if [ -z "$release" ]; then
+    release=$(cut -f1 -d. /etc/debian_version)
+fi
+if [ -z "$codename" ]; then
+    codename="$(sed -n 's/^VERSION=.*(\(.*\)).*/\1/p' /etc/os-release)"
+fi
 vestacp="$VESTA/install/$VERSION/$release"
 
-if [ "$release" -eq 9 ]; then
+repo_url="$RHOST"
+config_url="$CHOST"
+if ! [[ "$repo_url" =~ ^https?:// ]]; then
+    repo_url="http://$repo_url"
+fi
+if ! [[ "$config_url" =~ ^https?:// ]]; then
+    config_url="http://$config_url"
+fi
+
+if [ "$release" -eq 10 ]; then
+    software="nginx apache2 apache2-utils apache2-suexec-custom
+        libapache2-mod-ruid2 libapache2-mod-fcgid libapache2-mod-php php
+        php-common php-cgi php-mysql php-curl php-fpm php-pgsql awstats
+        webalizer vsftpd proftpd-basic bind9 exim4 exim4-daemon-heavy
+        clamav-daemon spamassassin dovecot-imapd dovecot-pop3d roundcube-core
+        roundcube-mysql roundcube-plugins default-mysql-server
+        default-mysql-client postgresql postgresql-contrib mc flex whois rssh
+        git idn zip sudo bc ftp lsof ntpdate rrdtool quota e2fsprogs curl
+        imagemagick fail2ban dnsutils bsdmainutils cron vesta vesta-nginx
+        vesta-php expect libmail-dkim-perl unrar-free vim-common vesta-ioncube
+        vesta-softaculous net-tools unzip apparmor-utils"
+elif [ "$release" -eq 9 ]; then
     software="nginx apache2 apache2-utils apache2-suexec-custom
         libapache2-mod-ruid2 libapache2-mod-fcgid libapache2-mod-php php
         php-common php-cgi php-mysql php-curl php-fpm php-pgsql awstats
@@ -261,7 +291,7 @@ fi
 
 # Checking root permissions
 if [ "x$(id -u)" != 'x0' ]; then
-    check_error 1 "Script can be run executed only by root"
+    check_result 1 "Script can be run executed only by root"
 fi
 
 # Checking admin user account
@@ -279,7 +309,7 @@ if [ ! -e '/usr/bin/wget' ]; then
 fi
 
 # Checking repository availability
-wget -q "c.vestacp.com/deb_signing.key" -O /dev/null
+wget -q "$config_url/deb_signing.key" -O /dev/null
 check_result $? "No access to Vesta repository"
 
 # Check installed packages
@@ -494,8 +524,8 @@ wget http://nginx.org/keys/nginx_signing.key -O /tmp/nginx_signing.key
 apt-key add /tmp/nginx_signing.key
 
 # Installing vesta repo
-echo "deb http://$RHOST/$codename/ $codename vesta" > $apt/vesta.list
-wget $CHOST/deb_signing.key -O deb_signing.key
+echo "deb $repo_url/$codename/ $codename vesta" > $apt/vesta.list
+wget $config_url/deb_signing.key -O deb_signing.key
 apt-key add deb_signing.key
 
 # Installing jessie backports
@@ -637,9 +667,12 @@ if [ "$mysql" = 'no' ]; then
     software=$(echo "$software" | sed -e 's/mysql-server//')
     software=$(echo "$software" | sed -e 's/mysql-client//')
     software=$(echo "$software" | sed -e 's/mysql-common//')
+    software=$(echo "$software" | sed -e 's/default-mysql-server//')
+    software=$(echo "$software" | sed -e 's/default-mysql-client//')
     software=$(echo "$software" | sed -e 's/php5-mysql//')
     software=$(echo "$software" | sed -e 's/php-mysql//')
     software=$(echo "$software" | sed -e 's/phpMyAdmin//')
+    software=$(echo "$software" | sed -e 's/phpmyadmin//')
 fi
 if [ "$postgresql" = 'no' ]; then
     software=$(echo "$software" | sed -e 's/postgresql-contrib//')
@@ -662,6 +695,17 @@ fi
 
 # Update system packages
 apt-get update
+
+# Debian 10 removed phpMyAdmin from the main archive. Install web DB tools
+# only when they are available from the configured repositories.
+if [ "$release" -eq 10 ]; then
+    if [ "$mysql" = 'yes' ] && apt-cache show phpmyadmin >/dev/null 2>&1; then
+        software="$software phpmyadmin"
+    fi
+    if [ "$postgresql" = 'yes' ] && apt-cache show phppgadmin >/dev/null 2>&1; then
+        software="$software phppgadmin"
+    fi
+fi
 
 # Disable daemon autostart /usr/share/doc/sysv-rc/README.policy-rc.d.gz
 echo -e '#!/bin/sh \nexit 101' > /usr/sbin/policy-rc.d
@@ -774,7 +818,7 @@ if [ "$apache" = 'no' ] && [ "$nginx"  = 'yes' ]; then
     echo "WEB_PORT='80'" >> $VESTA/conf/vesta.conf
     echo "WEB_SSL_PORT='443'" >> $VESTA/conf/vesta.conf
     echo "WEB_SSL='openssl'"  >> $VESTA/conf/vesta.conf
-    if [ "$release" -eq 9 ]; then
+    if [ "$release" -ge 9 ]; then
         if [ "$phpfpm" = 'yes' ]; then
             echo "WEB_BACKEND='php-fpm'" >> $VESTA/conf/vesta.conf
         fi
@@ -834,6 +878,10 @@ echo "BACKUP_SYSTEM='local'" >> $VESTA/conf/vesta.conf
 
 # Language
 echo "LANGUAGE='$lang'" >> $VESTA/conf/vesta.conf
+
+# Update repositories
+echo "UPDATE_REPO_URL='$repo_url'" >> $VESTA/conf/vesta.conf
+echo "UPDATE_CONFIG_URL='$config_url'" >> $VESTA/conf/vesta.conf
 
 # Version
 echo "VERSION='0.9.8'" >> $VESTA/conf/vesta.conf
@@ -931,10 +979,16 @@ fi
 #----------------------------------------------------------#
 
 if [ "$phpfpm" = 'yes' ]; then
-    if [ "$release" -eq 9 ]; then
-        cp -f $vestacp/php-fpm/www.conf /etc/php/7.0/fpm/pool.d/www.conf
-        update-rc.d php7.0-fpm defaults
-        service php7.0-fpm start
+    if [ "$release" -ge 9 ]; then
+        pool=$(find /etc/php -type d -path '*/fpm/pool.d' |head -n1)
+        php_fpm=$(basename "$(ls /etc/init.d/php*-fpm 2>/dev/null |head -n1)")
+        if [ -z "$pool" ] || [ -z "$php_fpm" ]; then
+            check_result 1 "php-fpm configuration path not found"
+        fi
+        cp -f $vestacp/php-fpm/www.conf $pool/www.conf
+        ln -s /etc/init.d/$php_fpm /etc/init.d/php-fpm > /dev/null 2>&1
+        update-rc.d $php_fpm defaults
+        service $php_fpm start
         check_result $? "php-fpm start failed"
     else
         cp -f $vestacp/php5-fpm/www.conf /etc/php5/fpm/pool.d/www.conf
@@ -1019,12 +1073,16 @@ if [ "$mysql" = 'yes' ]; then
     mysql -e "FLUSH PRIVILEGES"
 
     # Configuring phpMyAdmin
-    if [ "$apache" = 'yes' ]; then
+    if [ "$apache" = 'yes' ] && [ -d /etc/phpmyadmin ]; then
         cp -f $vestacp/pma/apache.conf /etc/phpmyadmin/
         ln -s /etc/phpmyadmin/apache.conf /etc/apache2/conf.d/phpmyadmin.conf
     fi
-    cp -f $vestacp/pma/config.inc.php /etc/phpmyadmin/
-    chmod 777 /var/lib/phpmyadmin/tmp
+    if [ -d /etc/phpmyadmin ] && [ -d /usr/share/phpmyadmin ]; then
+        cp -f $vestacp/pma/config.inc.php /etc/phpmyadmin/
+        if [ -d /var/lib/phpmyadmin/tmp ]; then
+            chmod 777 /var/lib/phpmyadmin/tmp
+        fi
+    fi
 fi
 
 #----------------------------------------------------------#
@@ -1038,10 +1096,12 @@ if [ "$postgresql" = 'yes' ]; then
     sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$ppass'"
 
     # Configuring phpPgAdmin
-    if [ "$apache" = 'yes' ]; then
+    if [ "$apache" = 'yes' ] && [ -d /etc/phppgadmin ]; then
         cp -f $vestacp/pga/phppgadmin.conf /etc/apache2/conf.d/
     fi
-    cp -f $vestacp/pga/config.inc.php /etc/phppgadmin/
+    if [ -d /etc/phppgadmin ]; then
+        cp -f $vestacp/pga/config.inc.php /etc/phppgadmin/
+    fi
 fi
 
 
@@ -1109,7 +1169,7 @@ if [ "$dovecot" = 'yes' ]; then
     cp -rf $vestacp/dovecot /etc/
     cp -f $vestacp/logrotate/dovecot /etc/logrotate.d/
     chown -R root:root /etc/dovecot*
-    if [ "$release" -eq 9 ]; then
+    if [ "$release" -ge 9 ]; then
         sed -i "s#namespace inbox {#namespace inbox {\n  inbox = yes#" /etc/dovecot/conf.d/15-mailboxes.conf
     fi
     update-rc.d dovecot defaults
@@ -1187,7 +1247,7 @@ if [ "$exim" = 'yes' ] && [ "$mysql" = 'yes' ]; then
         /etc/roundcube/plugins/password/config.inc.php
     mysql roundcube < /usr/share/dbconfig-common/data/roundcube/install/mysql
     chmod a+r /etc/roundcube/main.inc.php
-    if [ "$release" -eq 8 ] || [ "$release" -eq 9 ]; then
+    if [ "$release" -ge 8 ]; then
         mv -f /etc/roundcube/main.inc.php /etc/roundcube/config.inc.php
         mv -f /etc/roundcube/db.inc.php /etc/roundcube/debian-db-roundcube.php
         chmod 640 /etc/roundcube/debian-db-roundcube.php

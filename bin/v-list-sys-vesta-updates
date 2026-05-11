@@ -16,6 +16,10 @@ format=${1-shell}
 source $VESTA/func/main.sh
 source $VESTA/conf/vesta.conf
 fields="\$NAME \$VERSION \$RELEASE \$ARCH \$UPDATED \$DESCR \$TIME \$DATE"
+chost="${UPDATE_CONFIG_URL:-${VESTA_CHOST:-c.vestacp.com}}"
+if ! [[ "$chost" =~ ^https?:// ]]; then
+    chost="http://$chost"
+fi
 
 # JSON list function
 json_list() {
@@ -60,8 +64,8 @@ shell_list() {
 #                       Action                             #
 #----------------------------------------------------------#
 
-# Checking official latest version
-latest=$(wget -q -T 1 -t 1 http://c.vestacp.com/latest.txt -O -)
+# Checking latest version
+latest=$(wget -q -T 1 -t 1 $chost/latest.txt -O -)
 
 # Checking installed vesta version
 if [ -d "/etc/sysconfig" ]; then

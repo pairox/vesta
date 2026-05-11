@@ -15,6 +15,10 @@ TYPE=$1
 source /etc/profile
 source $VESTA/func/main.sh
 source $VESTA/conf/vesta.conf
+chost="${UPDATE_CONFIG_URL:-${VESTA_CHOST:-c.vestacp.com}}"
+if ! [[ "$chost" =~ ^https?:// ]]; then
+    chost="http://$chost"
+fi
 
 
 #----------------------------------------------------------#
@@ -101,7 +105,7 @@ if [ ! -e "$VESTA/softaculous/vst_installed" ]; then
     mkdir -p /var/softaculous
     chown -R admin:admin /var/softaculous
     cd $VESTA/softaculous
-    wget -q http://c.vestacp.com/3rdparty/softaculous_install.inc
+    wget -q $chost/3rdparty/softaculous_install.inc
     $VESTA/php/bin/php softaculous_install.inc
     check_result $? "vesta-softaculous package installation failed" $E_UPDATE
     touch $VESTA/softaculous/vst_installed

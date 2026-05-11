@@ -22,7 +22,10 @@ source $VESTA/conf/vesta.conf
 #----------------------------------------------------------#
 
 # Defining config host
-chost='c.vestacp.com'
+chost="${UPDATE_CONFIG_URL:-${VESTA_CHOST:-c.vestacp.com}}"
+if ! [[ "$chost" =~ ^https?:// ]]; then
+    chost="http://$chost"
+fi
 
 # Detcing OS
 case $(head -n1 /etc/issue |cut -f 1 -d ' ') in
@@ -43,11 +46,16 @@ if [ "$version" = 'ubuntu' ]; then
     release=$(lsb_release -r |awk '{print $2}')
 fi
 if [ "$version" = 'debian' ]; then
-    release=$(cat /etc/issue|grep -o [0-9]|head -n1)
+    if [ -r /etc/os-release ]; then
+        . /etc/os-release
+        release="${VERSION_ID%%.*}"
+    else
+        release=$(cut -f1 -d. /etc/debian_version)
+    fi
 fi
 
 # Defining download url
-vestacp="http://$chost/$version/$release"
+vestacp="$chost/$version/$release"
 
 # Downloading template archive
 cd $(mktemp -d)

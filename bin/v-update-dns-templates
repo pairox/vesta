@@ -15,6 +15,10 @@ restart=$1
 # Includes
 source $VESTA/func/main.sh
 source $VESTA/conf/vesta.conf
+chost="${UPDATE_CONFIG_URL:-${VESTA_CHOST:-c.vestacp.com}}"
+if ! [[ "$chost" =~ ^https?:// ]]; then
+    chost="http://$chost"
+fi
 
 
 #----------------------------------------------------------#
@@ -25,7 +29,7 @@ source $VESTA/conf/vesta.conf
 tmpdir=$(mktemp -d --dry-run)
 mkdir $tmpdir
 cd $tmpdir
-wget http://c.vestacp.com/rhel/7/templates.tar.gz -q
+wget $chost/rhel/7/templates.tar.gz -q
 if [ "$?" -ne 0 ]; then
     echo "Error: can't download template.tar.gz"
     log_event "$E_CONNECT" "$ARGUMENTS"
