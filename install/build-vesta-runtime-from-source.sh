@@ -60,12 +60,21 @@ php_prefix="$build_root/runtime/php"
 multiarch="$(gcc -print-multiarch 2>/dev/null || true)"
 php_cppflags=""
 php_ldflags=""
+curl_prefix="/usr"
 if [ -n "$multiarch" ]; then
     if [ -d "/usr/include/$multiarch" ]; then
         php_cppflags="-I/usr/include/$multiarch"
     fi
     if [ -d "/usr/lib/$multiarch" ]; then
         php_ldflags="-L/usr/lib/$multiarch"
+    fi
+    if [ ! -e /usr/include/curl ] && [ -d "/usr/include/$multiarch/curl" ]; then
+        curl_prefix="$build_root/deps/curl"
+        mkdir -p "$curl_prefix/include" "$curl_prefix/lib"
+        ln -s "/usr/include/$multiarch/curl" "$curl_prefix/include/curl"
+        if [ -e "/usr/lib/$multiarch/libcurl.so" ]; then
+            ln -s "/usr/lib/$multiarch/libcurl.so" "$curl_prefix/lib/libcurl.so"
+        fi
     fi
 fi
 
@@ -99,7 +108,7 @@ fi
         --with-mysql=mysqlnd \
         --with-mysqli=mysqlnd \
         --with-pdo-mysql=mysqlnd \
-        --with-curl=/usr \
+        --with-curl="$curl_prefix" \
         --enable-mbstring \
         --disable-debug
     make -j "$jobs" ZEND_EXTRA_LIBS='-lresolv'
