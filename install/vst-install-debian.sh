@@ -14,11 +14,30 @@ VESTA='/usr/local/vesta'
 memory=$(grep 'MemTotal' /proc/meminfo |tr ' ' '\n' |grep [0-9])
 arch=$(uname -i)
 os='debian'
-release=$(cat /etc/debian_version|grep -o [0-9]|head -n1)
-codename="$(cat /etc/os-release |grep VERSION= |cut -f 2 -d \(|cut -f 1 -d \))"
+release=$(cat /etc/debian_version | grep -o '^[0-9][0-9]*' | head -n1)
+codename="$(cat /etc/os-release |grep VERSION= |cut -f 2 -d \( |cut -f 1 -d \))"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=install/debian-common.sh
+. "$script_dir/debian-common.sh"
+release="${VESTA_DEBIAN_RELEASE:-$release}"
+codename="${VESTA_DEBIAN_CODENAME:-$(vesta_debian_codename "$release")}"
 vestacp="$VESTA/install/$VERSION/$release"
 
-if [ "$release" -eq 9 ]; then
+if ! vesta_debian_supported "$release"; then
+    echo "Error: Debian $release is not supported by this installer"
+    exit 1
+fi
+
+if [ "${VESTA_CI:-0}" = 1 ] || [ "${VESTA_DRY_RUN:-0}" = 1 ]; then
+    dry_run="yes"
+    interactive="no"
+else
+    dry_run="no"
+fi
+
+if [ "$release" -ge 10 ]; then
+    software="$(vesta_debian_package_list "$release")"
+elif [ "$release" -eq 9 ]; then
     software="nginx apache2 apache2-utils apache2-suexec-custom
         libapache2-mod-ruid2 libapache2-mod-fcgid libapache2-mod-php php
         php-common php-cgi php-mysql php-curl php-fpm php-pgsql awstats
@@ -138,6 +157,18 @@ set_default_lang() {
     fi
 }
 
+
+if [ "$dry_run" = 'yes' ]; then
+    echo "Vesta Debian installer dry-run"
+    echo "release=$release"
+    echo "codename=$codename"
+    echo "vestacp=$vestacp"
+    echo "repositories:"
+    vesta_debian_repo_lines "$release" "$RHOST"
+    echo "packages:"
+    echo "$software" | xargs -n1 | sort -u
+    exit 0
+fi
 
 #----------------------------------------------------------#
 #                    Verifications                         #
@@ -487,16 +518,22 @@ fi
 apt-get -y upgrade
 check_result $? 'apt-get upgrade failed'
 
-# Installing nginx repo
+# Installing nginx and vesta repos
 apt=/etc/apt/sources.list.d
-echo "deb http://nginx.org/packages/debian/ $codename nginx" > $apt/nginx.list
-wget http://nginx.org/keys/nginx_signing.key -O /tmp/nginx_signing.key
-apt-key add /tmp/nginx_signing.key
-
-# Installing vesta repo
-echo "deb http://$RHOST/$codename/ $codename vesta" > $apt/vesta.list
-wget $CHOST/deb_signing.key -O deb_signing.key
-apt-key add deb_signing.key
+if [ "$release" -ge 11 ]; then
+    install -d -m 0755 /usr/share/keyrings
+    wget -qO- http://nginx.org/keys/nginx_signing.key | gpg --dearmor > /usr/share/keyrings/nginx-archive-keyring.gpg
+    wget -qO- http://$CHOST/deb_signing.key | gpg --dearmor > /usr/share/keyrings/vesta-archive-keyring.gpg
+    vesta_debian_repo_lines "$release" "$RHOST" | sed -n '1p' > $apt/nginx.list
+    vesta_debian_repo_lines "$release" "$RHOST" | sed -n '2p' > $apt/vesta.list
+else
+    echo "deb http://nginx.org/packages/debian/ $codename nginx" > $apt/nginx.list
+    wget http://nginx.org/keys/nginx_signing.key -O /tmp/nginx_signing.key
+    apt-key add /tmp/nginx_signing.key
+    echo "deb http://$RHOST/$codename/ $codename vesta" > $apt/vesta.list
+    wget $CHOST/deb_signing.key -O deb_signing.key
+    apt-key add deb_signing.key
+fi
 
 # Installing jessie backports
 if [ "$release" -eq 8 ]; then
@@ -655,6 +692,18 @@ if [ "$iptables" = 'no' ] || [ "$fail2ban" = 'no' ]; then
     software=$(echo "$software" | sed -e 's/fail2ban//')
 fi
 
+
+if [ "$dry_run" = 'yes' ]; then
+    echo "Vesta Debian installer dry-run"
+    echo "release=$release"
+    echo "codename=$codename"
+    echo "vestacp=$vestacp"
+    echo "repositories:"
+    vesta_debian_repo_lines "$release" "$RHOST"
+    echo "packages:"
+    echo "$software" | xargs -n1 | sort -u
+    exit 0
+fi
 
 #----------------------------------------------------------#
 #                     Install packages                     #
@@ -931,10 +980,11 @@ fi
 #----------------------------------------------------------#
 
 if [ "$phpfpm" = 'yes' ]; then
-    if [ "$release" -eq 9 ]; then
-        cp -f $vestacp/php-fpm/www.conf /etc/php/7.0/fpm/pool.d/www.conf
-        update-rc.d php7.0-fpm defaults
-        service php7.0-fpm start
+    if [ "$release" -ge 9 ]; then
+        phpver=$(vesta_debian_php_version "$release")
+        cp -f $vestacp/php-fpm/www.conf /etc/php/$phpver/fpm/pool.d/www.conf
+        update-rc.d php$phpver-fpm defaults
+        service php$phpver-fpm start
         check_result $? "php-fpm start failed"
     else
         cp -f $vestacp/php5-fpm/www.conf /etc/php5/fpm/pool.d/www.conf
@@ -1109,7 +1159,7 @@ if [ "$dovecot" = 'yes' ]; then
     cp -rf $vestacp/dovecot /etc/
     cp -f $vestacp/logrotate/dovecot /etc/logrotate.d/
     chown -R root:root /etc/dovecot*
-    if [ "$release" -eq 9 ]; then
+    if [ "$release" -ge 9 ] && [ -f /etc/dovecot/conf.d/15-mailboxes.conf ]; then
         sed -i "s#namespace inbox {#namespace inbox {\n  inbox = yes#" /etc/dovecot/conf.d/15-mailboxes.conf
     fi
     update-rc.d dovecot defaults
@@ -1187,7 +1237,7 @@ if [ "$exim" = 'yes' ] && [ "$mysql" = 'yes' ]; then
         /etc/roundcube/plugins/password/config.inc.php
     mysql roundcube < /usr/share/dbconfig-common/data/roundcube/install/mysql
     chmod a+r /etc/roundcube/main.inc.php
-    if [ "$release" -eq 8 ] || [ "$release" -eq 9 ]; then
+    if [ "$release" -ge 8 ]; then
         mv -f /etc/roundcube/main.inc.php /etc/roundcube/config.inc.php
         mv -f /etc/roundcube/db.inc.php /etc/roundcube/debian-db-roundcube.php
         chmod 640 /etc/roundcube/debian-db-roundcube.php

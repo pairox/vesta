@@ -1,0 +1,37 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+  workflow_dispatch:
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: make lint-shell
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.2']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+      - run: make lint-php
+  debian-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        debian: ['9', '10', '11', '12']
+    container: debian:${{ matrix.debian }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y make bash findutils gawk sed grep coreutils
+      - run: VESTA_DEBIAN_RELEASE=${{ matrix.debian }} VESTA_CI=1 bash install/vst-install-debian.sh --interactive no --apache no --nginx no --mysql no --exim no --dovecot no --clamav no --spamassassin no --iptables no --fail2ban no --softaculous no
+      - run: bash tests/debian-smoke.sh

@@ -1,0 +1,18 @@
+name: Release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: tar --exclude-vcs -czf vesta-fork-${GITHUB_REF_NAME:-manual}.tar.gz .
+      - run: sha256sum vesta-fork-*.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vesta-fork-bundle
+          path: |
+            vesta-fork-*.tar.gz
+            SHA256SUMS
