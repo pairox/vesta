@@ -12,6 +12,7 @@ vesta_debian_codename() {
         12) echo bookworm ;;
         *)
             if [ -r /etc/os-release ]; then
+                # shellcheck source=/dev/null
                 . /etc/os-release
                 echo "${VERSION_CODENAME:-}"
             fi
@@ -50,7 +51,7 @@ vesta_debian_package_list() {
     fi
     local base="nginx apache2 apache2-utils apache2-suexec-custom libapache2-mod-fcgid awstats webalizer vsftpd proftpd-basic bind9 exim4 exim4-daemon-heavy clamav-daemon spamassassin dovecot-imapd dovecot-pop3d roundcube-core roundcube-mysql roundcube-plugins postgresql postgresql-contrib phppgadmin phpmyadmin mc flex whois rssh git idn zip sudo bc ftp lsof ntpdate rrdtool quota bsdutils e2fsprogs curl ca-certificates openssl gnupg imagemagick fail2ban dnsutils bsdmainutils cron vesta vesta-nginx vesta-php expect libmail-dkim-perl unrar-free vim-common vesta-ioncube vesta-softaculous net-tools unzip iptables iptables-persistent"
     if [ "$release" -ge 12 ]; then
-        base=$(echo "$base" | sed -e 's/ bsdmainutils / /')
+        base="${base/ bsdmainutils / }"
         base="$base bsdextrautils nftables"
     fi
     if [ "$release" -eq 10 ]; then
