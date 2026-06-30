@@ -78,7 +78,7 @@ make_jobs="${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
         --with-fpm-group=admin \
         --with-mysql=mysqlnd \
         --with-mysqli=mysqlnd \
-        --with-curl \
+        --with-curl=/usr \
         --enable-mbstring
     make -j "$make_jobs" ZEND_EXTRA_LIBS='-lresolv'
     make install INSTALL_ROOT="$pkg_root" INSTALLDIRS=vendor
