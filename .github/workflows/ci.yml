@@ -29,9 +29,21 @@ jobs:
       fail-fast: false
       matrix:
         debian: ['9', '10', '11', '12']
-    container: debian:${{ matrix.debian }}
     steps:
       - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y make bash findutils gawk sed grep coreutils
-      - run: VESTA_DEBIAN_RELEASE=${{ matrix.debian }} VESTA_CI=1 bash install/vst-install-debian.sh --interactive no --apache no --nginx no --mysql no --exim no --dovecot no --clamav no --spamassassin no --iptables no --fail2ban no --softaculous no
-      - run: bash tests/debian-smoke.sh
+      - name: Run Debian ${{ matrix.debian }} smoke test
+        run: |
+          docker run --rm \
+            --volume "$PWD:/work:ro" \
+            --workdir /work \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env VESTA_CI=1 \
+            --env VESTA_DEBIAN_RELEASE=${{ matrix.debian }} \
+            debian:${{ matrix.debian }} \
+            bash -euo pipefail -c '
+              tools/ci-configure-debian-sources.sh "$VESTA_DEBIAN_RELEASE"
+              apt-get update
+              apt-get install -y --no-install-recommends make bash findutils gawk sed grep coreutils
+              bash install/vst-install-debian.sh --interactive no --apache no --nginx no --mysql no --exim no --dovecot no --clamav no --spamassassin no --iptables no --fail2ban no --softaculous no
+              bash tests/debian-smoke.sh
+            '

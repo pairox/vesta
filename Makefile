@@ -5,7 +5,11 @@ SHELL := /bin/bash
 ci: lint-shell lint-php smoke-debian test-dry-run
 
 lint-shell:
-	find install bin func upd tools tests -type f \( -name '*.sh' -o -perm -111 \) -print0 | xargs -0 -r bash -n
+	find install bin func upd tools tests -type f -print0 | while IFS= read -r -d '' file; do \
+		if [[ "$$file" == *.sh ]]; then printf '%s\0' "$$file"; continue; fi; \
+		IFS= read -r first_line < "$$file" || true; \
+		[[ "$$first_line" == '#!'*sh* ]] && printf '%s\0' "$$file"; \
+	done | xargs -0 -r bash -n
 	@if command -v shellcheck >/dev/null 2>&1; then shellcheck install/debian-common.sh tools/*.sh tests/*.sh; else echo 'shellcheck not installed; skipping'; fi
 
 lint-php:
