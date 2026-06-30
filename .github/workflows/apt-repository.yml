@@ -1,0 +1,104 @@
+name: Publish APT repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      codename:
+        description: Debian/Ubuntu codename to publish, for example stretch
+        required: true
+        default: stretch
+      component:
+        description: APT component name
+        required: true
+        default: vesta
+  push:
+    paths:
+      - 'apt/pool/**/*.deb'
+      - 'scripts/build-apt-repository.sh'
+      - '.github/workflows/apt-repository.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      APT_CODENAME: ${{ github.event.inputs.codename || 'stretch' }}
+      APT_COMPONENT: ${{ github.event.inputs.component || 'vesta' }}
+      APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+      APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install repository tools
+        run: sudo apt-get update && sudo apt-get install -y apt-utils dpkg-dev gnupg
+
+      - name: Import signing key
+        if: ${{ env.APT_GPG_PRIVATE_KEY != '' }}
+        id: gpg
+        run: |
+          install -m 700 -d ~/.gnupg
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          if [ -n "$APT_GPG_PASSPHRASE" ]; then
+            printf '%s' "$APT_GPG_PASSPHRASE" > ~/.gnupg/passphrase
+            chmod 600 ~/.gnupg/passphrase
+          fi
+          key_id=$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "sec" { print $5; exit }')
+          if [ -z "$key_id" ]; then
+            echo "No secret key was imported" >&2
+            exit 1
+          fi
+          echo "key-id=$key_id" >> "$GITHUB_OUTPUT"
+
+      - name: Configure GPG passphrase
+        if: ${{ env.APT_GPG_PRIVATE_KEY != '' && env.APT_GPG_PASSPHRASE != '' }}
+        run: |
+          cat > ~/.gnupg/gpg-agent.conf <<'GPG_AGENT_CONF'
+          allow-preset-passphrase
+          pinentry-program /usr/bin/pinentry-curses
+          GPG_AGENT_CONF
+          gpgconf --kill gpg-agent || true
+          gpg --batch --pinentry-mode loopback --passphrase-file ~/.gnupg/passphrase --list-secret-keys >/dev/null
+
+      - name: Build signed APT repository
+        if: ${{ env.APT_GPG_PRIVATE_KEY != '' }}
+        run: |
+          ./scripts/build-apt-repository.sh \
+            --input apt/pool \
+            --output public \
+            --codename "$APT_CODENAME" \
+            --component "$APT_COMPONENT" \
+            --gpg-key "${{ steps.gpg.outputs.key-id }}" \
+            --require-signature
+
+      - name: Build unsigned APT repository
+        if: ${{ env.APT_GPG_PRIVATE_KEY == '' }}
+        run: |
+          ./scripts/build-apt-repository.sh \
+            --input apt/pool \
+            --output public \
+            --codename "$APT_CODENAME" \
+            --component "$APT_COMPONENT"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
