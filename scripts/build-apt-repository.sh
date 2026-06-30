@@ -13,6 +13,7 @@ Options:
   --label NAME            Release Label field (default: VestaCP fork)
   --suite NAME            Release Suite field (default: CODENAME)
   --description TEXT      Release Description field
+  --append                Add this codename to an existing output directory
   --allow-empty           Generate an empty repository when no .deb packages exist
   --architecture ARCH     Architecture to publish for an empty repository (default: amd64)
   --gpg-key KEYID         Sign Release as InRelease/Release.gpg with this GPG key
@@ -32,6 +33,7 @@ description="VestaCP Debian packages"
 gpg_key=""
 require_signature=0
 allow_empty=0
+append=0
 empty_archs=()
 
 while [[ $# -gt 0 ]]; do
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
         --label) label="$2"; shift 2 ;;
         --suite) suite="$2"; shift 2 ;;
         --description) description="$2"; shift 2 ;;
+        --append) append=1; shift ;;
         --allow-empty) allow_empty=1; shift ;;
         --architecture) empty_archs+=("$2"); shift 2 ;;
         --gpg-key) gpg_key="$2"; shift 2 ;;
@@ -86,8 +89,21 @@ fi
 
 suite="${suite:-$codename}"
 archs=()
-rm -rf "$output_dir"
+if [[ "$append" -ne 1 ]]; then
+    rm -rf "$output_dir"
+fi
 mkdir -p "$output_dir/pool/$component" "$output_dir/dists/$codename/$component"
+touch "$output_dir/.nojekyll"
+cat > "$output_dir/index.html" <<EOF_HTML
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>$label APT repository</title></head>
+<body>
+<h1>$label APT repository</h1>
+<p>APT suite: <a href="dists/$codename/Release">$codename</a>, component: $component.</p>
+</body>
+</html>
+EOF_HTML
 
 if [[ ${#debs[@]} -eq 0 ]]; then
     archs=("${empty_archs[@]}")

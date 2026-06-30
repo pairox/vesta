@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       codename:
-        description: Debian/Ubuntu codename to publish, for example stretch
+        description: Debian/Ubuntu codename(s) to publish, for example "stretch buster"
         required: true
-        default: stretch
+        default: stretch buster
       component:
         description: APT component name
         required: true
@@ -15,6 +15,8 @@ on:
     paths:
       - 'apt/pool/**/*.deb'
       - 'scripts/build-apt-repository.sh'
+      - 'scripts/build-vesta-deb.sh'
+      - 'src/deb/vesta/**'
       - '.github/workflows/apt-repository.yml'
 
 permissions:
@@ -30,8 +32,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      APT_CODENAME: ${{ github.event.inputs.codename || 'stretch' }}
+      APT_CODENAMES: ${{ github.event.inputs.codename || 'stretch buster' }}
       APT_COMPONENT: ${{ github.event.inputs.component || 'vesta' }}
+      APT_INPUT_DIR: /tmp/vesta-apt-pool
       APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
       APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
     steps:
@@ -42,6 +45,14 @@ jobs:
 
       - name: Install repository tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils dpkg-dev gnupg
+
+      - name: Build package pool
+        run: |
+          rm -rf "$APT_INPUT_DIR"
+          install -d "$APT_INPUT_DIR"
+          find apt/pool -type f -name '*.deb' -exec cp '{}' "$APT_INPUT_DIR/" ';'
+          ./scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR"
+          find "$APT_INPUT_DIR" -maxdepth 1 -type f -name '*.deb' -print
 
       - name: Import signing key
         if: ${{ env.APT_GPG_PRIVATE_KEY != '' }}
@@ -73,24 +84,32 @@ jobs:
       - name: Build signed APT repository
         if: ${{ env.APT_GPG_PRIVATE_KEY != '' }}
         run: |
-          ./scripts/build-apt-repository.sh \
-            --input apt/pool \
-            --output public \
-            --codename "$APT_CODENAME" \
-            --component "$APT_COMPONENT" \
-            --allow-empty \
-            --gpg-key "${{ steps.gpg.outputs.key-id }}" \
-            --require-signature
+          rm -rf public
+          for codename in $APT_CODENAMES; do
+            ./scripts/build-apt-repository.sh \
+              --input "$APT_INPUT_DIR" \
+              --output public \
+              --codename "$codename" \
+              --component "$APT_COMPONENT" \
+              --append \
+              --allow-empty \
+              --gpg-key "${{ steps.gpg.outputs.key-id }}" \
+              --require-signature
+          done
 
       - name: Build unsigned APT repository
         if: ${{ env.APT_GPG_PRIVATE_KEY == '' }}
         run: |
-          ./scripts/build-apt-repository.sh \
-            --input apt/pool \
-            --output public \
-            --codename "$APT_CODENAME" \
-            --component "$APT_COMPONENT" \
-            --allow-empty
+          rm -rf public
+          for codename in $APT_CODENAMES; do
+            ./scripts/build-apt-repository.sh \
+              --input "$APT_INPUT_DIR" \
+              --output public \
+              --codename "$codename" \
+              --component "$APT_COMPONENT" \
+              --append \
+              --allow-empty
+          done
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

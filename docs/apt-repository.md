@@ -6,6 +6,8 @@ This repository can publish Debian packages in the same APT layout that Vesta in
 
 Copy built packages into `apt/pool/` and commit them. The workflow accepts packages for multiple architectures and moves them into the generated `pool/<component>/<arch>/` tree.
 
+The workflow also builds the `vesta` package from the current repository and adds it to the generated pool automatically. Packages that contain bundled binaries, such as `vesta-nginx` and `vesta-php`, still need to be built separately and committed under `apt/pool/` if you want to publish replacements for them.
+
 The workflow can also run before the first package is committed. In that case it publishes an empty `amd64` repository so GitHub Pages deployment succeeds, and later `.deb` pushes replace it with package indexes.
 
 ```bash
@@ -26,14 +28,14 @@ The public key should be published for users, for example as `vesta-archive-keyr
 
 ## 3. Enable GitHub Pages
 
-In the GitHub repository settings, open **Settings** -> **Pages** and set **Build and deployment** -> **Source** to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch`, or push a `.deb` under `apt/pool/`.
+In the GitHub repository settings, open **Settings** -> **Pages** and set **Build and deployment** -> **Source** to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch buster`, or push a `.deb` under `apt/pool/`. Publishing both suites keeps Debian 9 clients on `stretch` and Debian 10 clients on `buster`.
 
 If `actions/deploy-pages` fails with `HttpError: Not Found` and `Ensure GitHub Pages has been enabled`, Pages is not enabled for the repository or the source is not set to **GitHub Actions** yet. Fix the repository setting first, then rerun the workflow.
 
 The published URL will look like this:
 
 ```text
-https://<owner>.github.io/<repo>/dists/stretch/InRelease
+https://<owner>.github.io/<repo>/dists/buster/InRelease
 ```
 
 ## 4. Configure clients
@@ -44,7 +46,7 @@ For a repository published at `https://<owner>.github.io/<repo>/`, clients can u
 curl -fsSL https://<owner>.github.io/<repo>/vesta-archive-keyring.gpg \
   | sudo gpg --dearmor -o /usr/share/keyrings/vesta-archive-keyring.gpg
 
-echo 'deb [signed-by=/usr/share/keyrings/vesta-archive-keyring.gpg] https://<owner>.github.io/<repo>/ stretch vesta' \
+echo 'deb [signed-by=/usr/share/keyrings/vesta-archive-keyring.gpg] https://<owner>.github.io/<repo>/ buster vesta' \
   | sudo tee /etc/apt/sources.list.d/vesta.list
 
 sudo apt-get update
@@ -63,3 +65,9 @@ sudo apt-get install -y apt-utils dpkg-dev gnupg
 ```
 
 To test the empty-repository path, pass `--allow-empty`. Use `--architecture` to publish a different empty architecture index.
+
+Build the local `vesta` package with:
+
+```bash
+./scripts/build-vesta-deb.sh --output apt/pool
+```
