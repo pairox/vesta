@@ -86,4 +86,8 @@ install -D -m 0755 "$repo_root/src/rpm/conf/nginx.conf" "$pkg_root/usr/local/ves
 install -D -m 0755 "$pkg_root/usr/local/vesta/nginx/sbin/nginx" "$pkg_root/usr/local/vesta/nginx/sbin/vesta-nginx"
 
 find "$pkg_root" -name '.DS_Store' -delete
-dpkg-deb --root-owner-group --build "$pkg_root" "$output_dir/${package}_${version}_${architecture}.deb"
+dpkg_deb_options=()
+if dpkg-deb --help 2>&1 | grep -q -- '--root-owner-group'; then
+    dpkg_deb_options+=(--root-owner-group)
+fi
+dpkg-deb "${dpkg_deb_options[@]}" --build "$pkg_root" "$output_dir/${package}_${version}_${architecture}.deb"

@@ -6,7 +6,7 @@ This repository can publish Debian packages in the same APT layout that Vesta in
 
 Copy built packages into `apt/pool/` and commit them. The workflow accepts packages for multiple architectures and moves them into the generated `pool/<component>/<arch>/` tree.
 
-The workflow also builds the `vesta`, `vesta-nginx`, and `vesta-php` packages and adds them to the generated pool automatically. The bundled `vesta-nginx` and `vesta-php` packages are compiled inside a Debian 10 `buster` container so the binaries match the upgrade target.
+The workflow also builds the `vesta`, `vesta-nginx`, and `vesta-php` packages and adds them to the generated pool automatically. The bundled `vesta-nginx` and `vesta-php` packages are compiled separately inside Debian 9, 10, 11, and 12 containers so each suite gets binaries built against its own system libraries.
 
 The workflow can also run before the first package is committed. In that case it publishes an empty `amd64` repository so GitHub Pages deployment succeeds, and later `.deb` pushes replace it with package indexes.
 
@@ -28,7 +28,7 @@ The public key should be published for users, for example as `vesta-archive-keyr
 
 ## 3. Enable GitHub Pages
 
-In the GitHub repository settings, open **Settings** -> **Pages** and set **Build and deployment** -> **Source** to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch buster`, or push a `.deb` under `apt/pool/`. Publishing both suites keeps Debian 9 clients on `stretch` and Debian 10 clients on `buster`.
+In the GitHub repository settings, open **Settings** -> **Pages** and set **Build and deployment** -> **Source** to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch buster bullseye bookworm`, or push a `.deb` under `apt/pool/`. Publishing all four suites keeps Debian 9 clients on `stretch`, Debian 10 on `buster`, Debian 11 on `bullseye`, and Debian 12 on `bookworm`.
 
 If `actions/deploy-pages` fails with `HttpError: Not Found` and `Ensure GitHub Pages has been enabled`, Pages is not enabled for the repository or the source is not set to **GitHub Actions** yet. Fix the repository setting first, then rerun the workflow.
 

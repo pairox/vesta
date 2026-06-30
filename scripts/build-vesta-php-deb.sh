@@ -66,6 +66,22 @@ install -d "$source_dir" "$pkg_root/DEBIAN" "$output_dir"
 curl -fsSL "$source_url" -o "$work_dir/php.tar.gz"
 tar -xzf "$work_dir/php.tar.gz" -C "$source_dir" --strip-components=1
 
+curl_include_dir=""
+for candidate in /usr/include/curl /usr/include/*/curl; do
+    if [[ -f "$candidate/easy.h" ]]; then
+        curl_include_dir="$candidate"
+        break
+    fi
+done
+if [[ -z "$curl_include_dir" ]]; then
+    echo "Cannot find curl/easy.h; install libcurl development headers." >&2
+    exit 1
+fi
+
+curl_prefix="$work_dir/curl-prefix"
+install -d "$curl_prefix/include"
+ln -s "$curl_include_dir" "$curl_prefix/include/curl"
+
 make_jobs="${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 (
     cd "$source_dir"
@@ -78,7 +94,7 @@ make_jobs="${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
         --with-fpm-group=admin \
         --with-mysql=mysqlnd \
         --with-mysqli=mysqlnd \
-        --with-curl=/usr \
+        --with-curl="$curl_prefix" \
         --enable-mbstring
     make -j "$make_jobs" ZEND_EXTRA_LIBS='-lresolv'
     make install INSTALL_ROOT="$pkg_root" INSTALLDIRS=vendor
@@ -101,4 +117,8 @@ rm -rf \
     "$pkg_root/.lock"
 
 find "$pkg_root" -name '.DS_Store' -delete
-dpkg-deb --root-owner-group --build "$pkg_root" "$output_dir/${package}_${version}_${architecture}.deb"
+dpkg_deb_options=()
+if dpkg-deb --help 2>&1 | grep -q -- '--root-owner-group'; then
+    dpkg_deb_options+=(--root-owner-group)
+fi
+dpkg-deb "${dpkg_deb_options[@]}" --build "$pkg_root" "$output_dir/${package}_${version}_${architecture}.deb"

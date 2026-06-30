@@ -69,4 +69,8 @@ for path in bin func install upd web LICENSE README.md SECURITY.md; do
 done
 
 find "$pkg_root" -name '.DS_Store' -delete
-dpkg-deb --root-owner-group --build "$pkg_root" "$output_dir/${package}_${version}_${architecture}.deb"
+dpkg_deb_options=()
+if dpkg-deb --help 2>&1 | grep -q -- '--root-owner-group'; then
+    dpkg_deb_options+=(--root-owner-group)
+fi
+dpkg-deb "${dpkg_deb_options[@]}" --build "$pkg_root" "$output_dir/${package}_${version}_${architecture}.deb"
