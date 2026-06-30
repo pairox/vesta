@@ -6,6 +6,8 @@ This repository can publish Debian packages in the same APT layout that Vesta in
 
 Copy built packages into `apt/pool/` and commit them. The workflow accepts packages for multiple architectures and moves them into the generated `pool/<component>/<arch>/` tree.
 
+The workflow can also run before the first package is committed. In that case it publishes an empty `amd64` repository so GitHub Pages deployment succeeds, and later `.deb` pushes replace it with package indexes.
+
 ```bash
 cp build/*.deb apt/pool/
 git add apt/pool/*.deb
@@ -57,3 +59,5 @@ sudo apt-get update
 sudo apt-get install -y apt-utils dpkg-dev gnupg
 ./scripts/build-apt-repository.sh --input apt/pool --output public --codename stretch --component vesta
 ```
+
+To test the empty-repository path, pass `--allow-empty`. Use `--architecture` to publish a different empty architecture index.

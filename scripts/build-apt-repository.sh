@@ -13,6 +13,8 @@ Options:
   --label NAME            Release Label field (default: VestaCP fork)
   --suite NAME            Release Suite field (default: CODENAME)
   --description TEXT      Release Description field
+  --allow-empty           Generate an empty repository when no .deb packages exist
+  --architecture ARCH     Architecture to publish for an empty repository (default: amd64)
   --gpg-key KEYID         Sign Release as InRelease/Release.gpg with this GPG key
   --require-signature     Fail when --gpg-key is not provided
   -h, --help              Show this help
@@ -29,6 +31,8 @@ suite=""
 description="VestaCP Debian packages"
 gpg_key=""
 require_signature=0
+allow_empty=0
+empty_archs=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -40,6 +44,8 @@ while [[ $# -gt 0 ]]; do
         --label) label="$2"; shift 2 ;;
         --suite) suite="$2"; shift 2 ;;
         --description) description="$2"; shift 2 ;;
+        --allow-empty) allow_empty=1; shift ;;
+        --architecture) empty_archs+=("$2"); shift 2 ;;
         --gpg-key) gpg_key="$2"; shift 2 ;;
         --require-signature) require_signature=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -68,8 +74,14 @@ fi
 
 mapfile -t debs < <(find "$input_dir" -type f -name '*.deb' | sort)
 if [[ ${#debs[@]} -eq 0 ]]; then
-    echo "No .deb packages found in $input_dir" >&2
-    exit 1
+    if [[ "$allow_empty" -ne 1 ]]; then
+        echo "No .deb packages found in $input_dir" >&2
+        exit 1
+    fi
+    if [[ ${#empty_archs[@]} -eq 0 ]]; then
+        empty_archs=(amd64)
+    fi
+    echo "No .deb packages found in $input_dir; generating empty repository for ${empty_archs[*]}" >&2
 fi
 
 suite="${suite:-$codename}"
@@ -77,23 +89,31 @@ archs=()
 rm -rf "$output_dir"
 mkdir -p "$output_dir/pool/$component" "$output_dir/dists/$codename/$component"
 
-for deb in "${debs[@]}"; do
-    arch=$(dpkg-deb -f "$deb" Architecture)
-    if [[ -z "$arch" ]]; then
-        echo "Cannot read Architecture from $deb" >&2
-        exit 1
-    fi
-    if [[ ! " ${archs[*]} " =~ [[:space:]]${arch}[[:space:]] ]]; then
-        archs+=("$arch")
-    fi
-    mkdir -p "$output_dir/pool/$component/$arch"
-    cp "$deb" "$output_dir/pool/$component/$arch/"
-done
+if [[ ${#debs[@]} -eq 0 ]]; then
+    archs=("${empty_archs[@]}")
+else
+    for deb in "${debs[@]}"; do
+        arch=$(dpkg-deb -f "$deb" Architecture)
+        if [[ -z "$arch" ]]; then
+            echo "Cannot read Architecture from $deb" >&2
+            exit 1
+        fi
+        if [[ ! " ${archs[*]} " =~ [[:space:]]${arch}[[:space:]] ]]; then
+            archs+=("$arch")
+        fi
+        mkdir -p "$output_dir/pool/$component/$arch"
+        cp "$deb" "$output_dir/pool/$component/$arch/"
+    done
+fi
 
 pushd "$output_dir" >/dev/null
 for arch in "${archs[@]}"; do
     mkdir -p "dists/$codename/$component/binary-$arch"
-    dpkg-scanpackages --arch "$arch" "pool/$component/$arch" /dev/null > "dists/$codename/$component/binary-$arch/Packages"
+    if [[ ${#debs[@]} -eq 0 ]]; then
+        : > "dists/$codename/$component/binary-$arch/Packages"
+    else
+        dpkg-scanpackages --arch "$arch" "pool/$component/$arch" /dev/null > "dists/$codename/$component/binary-$arch/Packages"
+    fi
     gzip -9cn "dists/$codename/$component/binary-$arch/Packages" > "dists/$codename/$component/binary-$arch/Packages.gz"
 done
 

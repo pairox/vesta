@@ -75,6 +75,7 @@ jobs:
             --output public \
             --codename "$APT_CODENAME" \
             --component "$APT_COMPONENT" \
+            --allow-empty \
             --gpg-key "${{ steps.gpg.outputs.key-id }}" \
             --require-signature
 
@@ -85,7 +86,8 @@ jobs:
             --input apt/pool \
             --output public \
             --codename "$APT_CODENAME" \
-            --component "$APT_COMPONENT"
+            --component "$APT_COMPONENT" \
+            --allow-empty
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
