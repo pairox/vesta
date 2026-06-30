@@ -26,7 +26,9 @@ The public key should be published for users, for example as `vesta-archive-keyr
 
 ## 3. Enable GitHub Pages
 
-In the GitHub repository settings, set Pages to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch`, or push a `.deb` under `apt/pool/`.
+In the GitHub repository settings, open **Settings** -> **Pages** and set **Build and deployment** -> **Source** to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch`, or push a `.deb` under `apt/pool/`.
+
+If `actions/deploy-pages` fails with `HttpError: Not Found` and `Ensure GitHub Pages has been enabled`, Pages is not enabled for the repository or the source is not set to **GitHub Actions** yet. Fix the repository setting first, then rerun the workflow.
 
 The published URL will look like this:
 
