@@ -6,7 +6,7 @@ This repository can publish Debian packages in the same APT layout that Vesta in
 
 Copy built packages into `apt/pool/` and commit them. The workflow accepts packages for multiple architectures and moves them into the generated `pool/<component>/<arch>/` tree.
 
-The workflow also builds the `vesta` package from the current repository and adds it to the generated pool automatically. Packages that contain bundled binaries, such as `vesta-nginx` and `vesta-php`, still need to be built separately and committed under `apt/pool/` if you want to publish replacements for them.
+The workflow also builds the `vesta`, `vesta-nginx`, and `vesta-php` packages and adds them to the generated pool automatically. The bundled `vesta-nginx` and `vesta-php` packages are compiled inside a Debian 10 `buster` container so the binaries match the upgrade target.
 
 The workflow can also run before the first package is committed. In that case it publishes an empty `amd64` repository so GitHub Pages deployment succeeds, and later `.deb` pushes replace it with package indexes.
 
@@ -70,4 +70,11 @@ Build the local `vesta` package with:
 
 ```bash
 ./scripts/build-vesta-deb.sh --output apt/pool
+```
+
+Build bundled web UI runtime packages with:
+
+```bash
+./scripts/build-vesta-nginx-deb.sh --output apt/pool
+./scripts/build-vesta-php-deb.sh --output apt/pool
 ```

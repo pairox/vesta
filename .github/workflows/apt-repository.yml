@@ -16,7 +16,15 @@ on:
       - 'apt/pool/**/*.deb'
       - 'scripts/build-apt-repository.sh'
       - 'scripts/build-vesta-deb.sh'
+      - 'scripts/build-vesta-nginx-deb.sh'
+      - 'scripts/build-vesta-php-deb.sh'
+      - 'tools/ci-configure-debian-sources.sh'
       - 'src/deb/vesta/**'
+      - 'src/deb/nginx/**'
+      - 'src/deb/php/**'
+      - 'src/rpm/conf/nginx.conf'
+      - 'src/rpm/conf/php.ini'
+      - 'src/rpm/conf/php-fpm.conf'
       - '.github/workflows/apt-repository.yml'
 
 permissions:
@@ -34,7 +42,8 @@ jobs:
     env:
       APT_CODENAMES: ${{ github.event.inputs.codename || 'stretch buster' }}
       APT_COMPONENT: ${{ github.event.inputs.component || 'vesta' }}
-      APT_INPUT_DIR: /tmp/vesta-apt-pool
+      APT_INPUT_DIR: .apt-pool-build
+      APT_PACKAGE_VERSION: 1.0.1-${{ github.run_number }}
       APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
       APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
     steps:
@@ -51,7 +60,26 @@ jobs:
           rm -rf "$APT_INPUT_DIR"
           install -d "$APT_INPUT_DIR"
           find apt/pool -type f -name '*.deb' -exec cp '{}' "$APT_INPUT_DIR/" ';'
-          ./scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR"
+          docker run --rm \
+            --volume "$PWD:/work" \
+            --workdir /work \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env APT_INPUT_DIR="$APT_INPUT_DIR" \
+            --env APT_PACKAGE_VERSION="$APT_PACKAGE_VERSION" \
+            --env MAKE_JOBS=2 \
+            debian:buster \
+            bash -euo pipefail -c '
+              tools/ci-configure-debian-sources.sh 10
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                apt-utils build-essential ca-certificates curl dpkg-dev \
+                libcurl4-openssl-dev libpcre3-dev libsqlite3-dev libssl-dev \
+                libxml2-dev libzip-dev pkg-config tar zlib1g-dev
+              scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+              scripts/build-vesta-nginx-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+              scripts/build-vesta-php-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+            '
+          sudo chown -R "$USER:$USER" "$APT_INPUT_DIR"
           find "$APT_INPUT_DIR" -maxdepth 1 -type f -name '*.deb' -print
 
       - name: Import signing key
