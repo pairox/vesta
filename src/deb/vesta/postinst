@@ -1,5 +1,12 @@
 #!/bin/bash
 
+VESTA="${VESTA:-/usr/local/vesta}"
+export VESTA
+
+if [ ! -e /etc/profile.d/vesta.sh ]; then
+    echo "export VESTA='$VESTA'" > /etc/profile.d/vesta.sh
+fi
+
 # Run triggers only on updates
 if [ ! -e "/usr/local/vesta/data/users/admin" ]; then
     exit
