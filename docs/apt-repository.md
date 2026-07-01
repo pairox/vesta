@@ -30,6 +30,8 @@ The public key should be published for users, for example as `vesta-archive-keyr
 
 In the GitHub repository settings, open **Settings** -> **Pages** and set **Build and deployment** -> **Source** to **GitHub Actions**. Run the **Publish APT repository** workflow manually with codename `stretch buster bullseye bookworm`, or push a `.deb` under `apt/pool/`. Publishing all four suites keeps Debian 9 clients on `stretch`, Debian 10 on `buster`, Debian 11 on `bullseye`, and Debian 12 on `bookworm`.
 
+The manual workflow input `version_prefix` controls the package version prefix. For example, `version_prefix` `1.0.2` and workflow run number `10` publish packages like `1.0.2-10+deb9`, `1.0.2-10+deb10`, `1.0.2-10+deb11`, and `1.0.2-10+deb12`.
+
 If `actions/deploy-pages` fails with `HttpError: Not Found` and `Ensure GitHub Pages has been enabled`, Pages is not enabled for the repository or the source is not set to **GitHub Actions** yet. Fix the repository setting first, then rerun the workflow.
 
 If `https://<owner>.github.io/<repo>/` shows the repository README/Jekyll site instead of `APT repository`, Pages is still using **Deploy from a branch**. APT clients will then fail with `404 Not Found` for `dists/<codename>/<component>/binary-amd64/Packages`. Change the source to **GitHub Actions** and rerun the workflow.

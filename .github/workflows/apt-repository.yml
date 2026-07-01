@@ -11,6 +11,10 @@ on:
         description: APT component name
         required: true
         default: vesta
+      version_prefix:
+        description: Debian package version prefix
+        required: true
+        default: 1.0.2
   push:
     paths:
       - 'apt/pool/**/*.deb'
@@ -55,7 +59,7 @@ jobs:
     env:
       APT_CODENAMES: ${{ github.event.inputs.codename || 'stretch buster bullseye bookworm' }}
       APT_INPUT_DIR: .apt-pool-build
-      APT_PACKAGE_VERSION: 1.0.1-${{ github.run_number }}
+      APT_PACKAGE_VERSION: ${{ github.event.inputs.version_prefix || '1.0.2' }}-${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
