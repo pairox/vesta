@@ -37,13 +37,86 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build-packages:
+    name: build ${{ matrix.codename }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - codename: stretch
+            debian_release: 9
+          - codename: buster
+            debian_release: 10
+          - codename: bullseye
+            debian_release: 11
+          - codename: bookworm
+            debian_release: 12
+    env:
+      APT_CODENAMES: ${{ github.event.inputs.codename || 'stretch buster bullseye bookworm' }}
+      APT_INPUT_DIR: .apt-pool-build
+      APT_PACKAGE_VERSION: 1.0.1-${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select suite
+        id: select-suite
+        run: |
+          selected=0
+          for codename in $APT_CODENAMES; do
+            if [ "$codename" = "${{ matrix.codename }}" ]; then
+              selected=1
+            fi
+          done
+          echo "selected=$selected" >> "$GITHUB_OUTPUT"
+
+      - name: Build package pool
+        if: ${{ steps.select-suite.outputs.selected == '1' }}
+        run: |
+          suite_pool="$APT_INPUT_DIR/${{ matrix.codename }}"
+          rm -rf "$suite_pool"
+          install -d "$suite_pool"
+          find apt/pool -type f -name '*.deb' -exec cp '{}' "$suite_pool/" ';'
+
+          docker run --rm \
+            --volume "$PWD:/work" \
+            --workdir /work \
+            --env DEBIAN_FRONTEND=noninteractive \
+            --env APT_DEBIAN_RELEASE="${{ matrix.debian_release }}" \
+            --env APT_INPUT_DIR="$suite_pool" \
+            --env APT_PACKAGE_VERSION="$APT_PACKAGE_VERSION+deb${{ matrix.debian_release }}" \
+            --env MAKE_JOBS=2 \
+            "debian:${{ matrix.debian_release }}" \
+            bash -euo pipefail -c '
+              tools/ci-configure-debian-sources.sh "$APT_DEBIAN_RELEASE"
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                apt-utils build-essential ca-certificates curl dpkg-dev \
+                libcurl4-openssl-dev libpcre3-dev libsqlite3-dev libssl-dev \
+                libxml2-dev libzip-dev pkg-config tar zlib1g-dev
+              scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+              scripts/build-vesta-nginx-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+              scripts/build-vesta-php-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+            '
+
+          sudo chown -R "$USER:$USER" "$suite_pool"
+          find "$suite_pool" -type f -name '*.deb' -print
+
+      - name: Upload package pool
+        if: ${{ steps.select-suite.outputs.selected == '1' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: apt-pool-${{ matrix.codename }}
+          path: ${{ env.APT_INPUT_DIR }}/${{ matrix.codename }}
+          if-no-files-found: error
+
   build:
+    needs: build-packages
     runs-on: ubuntu-latest
     env:
       APT_CODENAMES: ${{ github.event.inputs.codename || 'stretch buster bullseye bookworm' }}
       APT_COMPONENT: ${{ github.event.inputs.component || 'vesta' }}
       APT_INPUT_DIR: .apt-pool-build
-      APT_PACKAGE_VERSION: 1.0.1-${{ github.run_number }}
       APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
       APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
     steps:
@@ -55,44 +128,25 @@ jobs:
       - name: Install repository tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils dpkg-dev gnupg
 
-      - name: Build package pool
+      - name: Download package pools
+        uses: actions/download-artifact@v4
+        with:
+          pattern: apt-pool-*
+          path: .apt-pool-artifacts
+
+      - name: Restore package pools
         run: |
           rm -rf "$APT_INPUT_DIR"
           for codename in $APT_CODENAMES; do
-            case "$codename" in
-              stretch) debian_release=9 ;;
-              buster) debian_release=10 ;;
-              bullseye) debian_release=11 ;;
-              bookworm) debian_release=12 ;;
-              *) echo "Unsupported codename for package build: $codename" >&2; exit 2 ;;
-            esac
-
+            artifact_dir=".apt-pool-artifacts/apt-pool-$codename"
+            if [ ! -d "$artifact_dir" ]; then
+              echo "Missing package pool artifact for $codename" >&2
+              exit 1
+            fi
             suite_pool="$APT_INPUT_DIR/$codename"
             install -d "$suite_pool"
-            find apt/pool -type f -name '*.deb' -exec cp '{}' "$suite_pool/" ';'
-
-            docker run --rm \
-              --volume "$PWD:/work" \
-              --workdir /work \
-              --env DEBIAN_FRONTEND=noninteractive \
-              --env APT_DEBIAN_RELEASE="$debian_release" \
-              --env APT_INPUT_DIR="$suite_pool" \
-              --env APT_PACKAGE_VERSION="$APT_PACKAGE_VERSION+deb$debian_release" \
-              --env MAKE_JOBS=2 \
-              "debian:$debian_release" \
-              bash -euo pipefail -c '
-                tools/ci-configure-debian-sources.sh "$APT_DEBIAN_RELEASE"
-                apt-get update
-                apt-get install -y --no-install-recommends \
-                  apt-utils build-essential ca-certificates curl dpkg-dev \
-                  libcurl4-openssl-dev libpcre3-dev libsqlite3-dev libssl-dev \
-                  libxml2-dev libzip-dev pkg-config tar zlib1g-dev
-                scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
-                scripts/build-vesta-nginx-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
-                scripts/build-vesta-php-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
-              '
+            find "$artifact_dir" -type f -name '*.deb' -exec cp '{}' "$suite_pool/" ';'
           done
-          sudo chown -R "$USER:$USER" "$APT_INPUT_DIR"
           find "$APT_INPUT_DIR" -type f -name '*.deb' -print
 
       - name: Import signing key
@@ -152,6 +206,15 @@ jobs:
               --allow-empty
           done
 
+      - name: Verify APT repository artifact
+        run: |
+          test -f public/.nojekyll
+          for codename in $APT_CODENAMES; do
+            test -s "public/dists/$codename/Release"
+            test -s "public/dists/$codename/$APT_COMPONENT/binary-amd64/Packages"
+            test -s "public/dists/$codename/$APT_COMPONENT/binary-amd64/Packages.gz"
+          done
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -160,6 +223,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      APT_CODENAMES: ${{ github.event.inputs.codename || 'stretch buster bullseye bookworm' }}
+      APT_COMPONENT: ${{ github.event.inputs.component || 'vesta' }}
     permissions:
       pages: write
       id-token: write
@@ -170,3 +236,22 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify published APT repository
+        run: |
+          base_url="${{ steps.deployment.outputs.page_url }}"
+          base_url="${base_url%/}"
+          for attempt in 1 2 3 4 5; do
+            failed=0
+            for codename in $APT_CODENAMES; do
+              curl -fsSL "$base_url/dists/$codename/Release" >/dev/null || failed=1
+              curl -fsSL "$base_url/dists/$codename/$APT_COMPONENT/binary-amd64/Packages.gz" >/dev/null || failed=1
+            done
+            if [ "$failed" -eq 0 ]; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "GitHub Pages is not serving the generated APT repository." >&2
+          echo "Set Settings -> Pages -> Build and deployment -> Source to GitHub Actions, then rerun this workflow." >&2
+          exit 1
