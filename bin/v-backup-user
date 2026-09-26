@@ -825,6 +825,75 @@ sftp_backup() {
     fi
 }
 
+rclone_backup() {
+    local config="$VESTA/conf/rclone.backup.conf"
+    local archive="$BACKUP/$user.$backup_new_date.tar"
+    local remote_path
+    local remote_archive
+    local backup_list
+    local backups_count
+    local backups_rm_number
+    local backup
+
+    rclone_fail() {
+        local result_code="$1"
+        local error="$2"
+
+        rm -f "$archive"
+        rm -rf "$tmpdir"
+        sed -i "/v-backup-user $user /d" "$VESTA/data/queue/backup.pipe"
+        echo "$error" |$SENDMAIL -s "$subj" "$email" "$notify"
+        check_result "$result_code" "$error"
+    }
+
+    if [ ! -e "$config" ]; then
+        rclone_fail "$E_NOTEXIST" "$config doesn't exist"
+    fi
+
+    source "$config"
+
+    if [ -z "$RCLONE_REMOTE" ] || [ -z "$RCLONE_BPATH" ]; then
+        rclone_fail "$E_PARSING" "Can't parse rclone backup configuration"
+    fi
+
+    if ! command -v rclone > /dev/null 2>&1; then
+        rclone_fail "$E_NOTEXIST" "rclone is not installed"
+    fi
+
+    remote_path="${RCLONE_REMOTE%/}/${RCLONE_BPATH#/}"
+    remote_archive="$remote_path/$user.$backup_new_date.tar"
+
+    echo -e "$(date "+%F %T") Remote: $remote_archive" |tee -a "$BACKUP/$user.log"
+    echo -e "$(date "+%F %T") Creating $user.$backup_new_date.tar ..." |tee -a "$BACKUP/$user.log"
+
+    cd "$tmpdir" || rclone_fail "$E_NOTEXIST" "Can't open $tmpdir"
+    if ! tar -cf "$archive" .; then
+        rclone_fail "$E_DISK" "Failed to create $archive"
+    fi
+
+    echo -e "$(date "+%F %T") Uploading $user.$backup_new_date.tar ..." |tee -a "$BACKUP/$user.log"
+    if ! rclone copyto "$archive" "$remote_archive" --stats 30s --stats-one-line; then
+        rclone_fail "$E_CONNECT" "rclone failed to upload $user.$backup_new_date.tar"
+    fi
+    rm -f "$archive"
+
+    if ! backup_list=$(rclone lsf "$remote_path" --files-only --include "$user.*.tar" 2>/dev/null); then
+        rclone_fail "$E_CONNECT" "rclone failed to list $remote_path"
+    fi
+    backup_list=$(echo "$backup_list" |sort)
+    backups_count=$(echo "$backup_list" |sed '/^$/d' |wc -l)
+    if [ "$backups_count" -gt "$BACKUPS" ]; then
+        backups_rm_number=$((backups_count - BACKUPS))
+        while IFS= read -r backup; do
+            [ -n "$backup" ] || continue
+            echo -e "$(date "+%F %T") Rotated rclone backup: ${backup#$user.}" |tee -a "$BACKUP/$user.log"
+            if ! rclone deletefile "$remote_path/$backup"; then
+                rclone_fail "$E_CONNECT" "rclone failed to rotate $backup"
+            fi
+        done < <(echo "$backup_list" |head -n "$backups_rm_number")
+    fi
+}
+
 google_backup() {
 
     # Defining google settings
@@ -873,7 +942,9 @@ for backup_type in $(echo -e "${BACKUP_SYSTEM//,/\\n}"); do
         local) local_backup ;;
         ftp)   ftp_backup ;;
         sftp)  sftp_backup ;;
+        rclone) rclone_backup ;;
         google) google_backup ;;
+        *) check_result "$E_PARSING" "Unknown backup system: $backup_type" ;;
     esac
 done
 

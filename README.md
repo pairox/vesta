@@ -1,44 +1,36 @@
-[Vesta Control Panel](http://vestacp.com/)
-==================================================
+# Vesta Control Panel for Debian 12
 
-Vesta is back under active development as of 25 February 2024. We are commited to open source, and will engage with the community to identify the new roadmap for Vesta. Stay tuned!
+This repository is a community fork of [Vesta Control Panel](https://github.com/outroll/vesta). It keeps the familiar Vesta hosting control panel while adding support for Debian 12 (`bookworm`).
 
-[![Join the chat at https://gitter.im/vesta-cp/Lobby](https://badges.gitter.im/vesta-cp/Lobby.svg)](https://gitter.im/vesta-cp/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+The Debian 12 build is available for `amd64` and uses the distribution's current system packages, including PHP 8.2.
 
-* Vesta is an open source hosting control panel.
-* Vesta has a clean and focused interface without the clutter.
-* Vesta has the latest of very innovative technologies.
+## Upgrade an existing installation
 
-How to install (2 step)
-----------------------------
-Connect to your server as root via SSH
+Back up your Vesta configuration and user data before upgrading. Then add this fork's APT repository and update the Vesta packages:
+
 ```bash
-ssh root@your.server
+sudo apt-get update
+sudo apt-get install -y ca-certificates
+
+echo 'deb [trusted=yes] https://pairox.github.io/vesta/ bookworm vesta' \
+  | sudo tee /etc/apt/sources.list.d/vesta-fork.list
+
+sudo apt-get update
+sudo apt-get install --only-upgrade vesta vesta-nginx vesta-php
 ```
 
-Download the installation script, and run it:
-```bash
-curl https://vestacp.com/pub/vst-install.sh | bash
-```
+The published repository is currently unsigned, which is why the source uses `trusted=yes`. Only add it if you trust this fork and its GitHub Pages repository.
 
-How to install (3 step)
-----------------------------
-If the above example does not work, try this 3 step method:
-Connect to your server as root via SSH
-```bash
-ssh root@your.server
-```
+For a major operating-system upgrade, especially from Debian 9, a fresh Debian 12 server followed by a Vesta data migration is strongly recommended. See the [Debian 9 to Debian 12 upgrade guide](docs/debian-upgrade-9-to-12.md) for details.
 
-Download the installation script:
-```bash
-curl -O https://vestacp.com/pub/vst-install.sh
-```
-Then run it:
-```bash
-bash vst-install.sh
-```
+## Support status
 
-License
-----------------------------
-Vesta is licensed under  [GPL v3 ](https://github.com/outroll/vesta/blob/master/LICENSE) license
+- Debian 12 (`bookworm`): supported by this fork.
+- Debian 10 (`buster`) and Debian 11 (`bullseye`): recognized by the installer and covered by smoke tests.
+- Debian 9 (`stretch`): retained as a legacy migration source.
 
+More details are available in the [Debian support notes](docs/debian-support.md) and [APT repository documentation](docs/apt-repository.md).
+
+## License
+
+Vesta Control Panel is distributed under the [GNU General Public License v3](LICENSE).
