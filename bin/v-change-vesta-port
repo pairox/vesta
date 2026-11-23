@@ -16,7 +16,7 @@ if [ -z "$VESTA" ]; then
 fi
 
 # Get current vesta port by reading nginx.conf
-oldport=$(grep 'listen' $VESTA/nginx/conf/nginx.conf | awk '{print $2}' | sed "s|;||")
+oldport=$(awk '$1 == "listen" { sub(/;$/, "", $2); sub(/^.*:/, "", $2); print $2; exit }' "$VESTA/nginx/conf/nginx.conf")
 if [ -z "$oldport" ]; then
     oldport=8083
 fi
@@ -40,7 +40,7 @@ is_int_format_valid "$port" 'port number'
 #                       Action                             #
 #----------------------------------------------------------#
 
-sed -i "s|$oldport;|$port;|g" $VESTA/nginx/conf/nginx.conf
+sed -Ei "/^[[:space:]]*listen[[:space:]]/s/([[:space:]:])${oldport}([[:space:];])/\1${port}\2/" "$VESTA/nginx/conf/nginx.conf"
 if [ -f "/etc/roundcube/plugins/password/config.inc.php" ]; then
     sed -i "s|'$oldport'|'$port'|g" /etc/roundcube/plugins/password/config.inc.php
 fi

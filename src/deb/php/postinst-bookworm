@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+[ "$1" = configure ] || exit 0
+
+vesta=/usr/local/vesta
+php="$vesta/php"
+ini="$php/lib/php.ini"
+loader="$vesta/ioncube/ioncube_loader_lin_8.2.so"
+candidate=$(mktemp "$php/lib/.php.ini.XXXXXX")
+trap 'rm -f "$candidate"' EXIT
+cp -p "$ini" "$candidate"
+
+# The old vesta-ioncube package hardcodes PHP 5.6. Do not invoke its hook here.
+sed -E '/^[[:space:]]*zend_extension[[:space:]]*=.*ioncube_loader/d' "$ini" > "$candidate"
+if [ -s "$loader" ]; then
+    "$php/bin/php" -n -d "zend_extension=$loader" -r 'exit(extension_loaded("ionCube Loader") ? 0 : 1);'
+    printf '\nzend_extension = "%s"\n' "$loader" >> "$candidate"
+fi
+if [ -n "${2:-}" ]; then
+    "$php/sbin/vesta-php" -c "$candidate" -y "$php/etc/php-fpm.conf" -t
+fi
+if ! cmp -s "$ini" "$candidate"; then
+    mv -f "$candidate" "$ini"
+fi
+if [ -n "${2:-}" ] && { [ -s /run/vesta-php.pid ] || [ -s /run/vesta-nginx.pid ]; }; then
+    invoke-rc.d vesta restart
+fi

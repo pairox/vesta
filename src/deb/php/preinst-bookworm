@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+[ "$1" = upgrade ] || exit 0
+
+vesta=/usr/local/vesta
+loader="$vesta/ioncube/ioncube_loader_lin_8.2.so"
+if [ -d "$vesta/softaculous" ] ||
+    grep -Eiq '^[[:space:]]*zend_extension[[:space:]]*=.*ioncube_loader' "$vesta/php/lib/php.ini"; then
+    if [ ! -s "$loader" ]; then
+        echo "Stage the Linux x86-64 ionCube Loader for PHP 8.2 at $loader before upgrading the panel." >&2
+        exit 1
+    fi
+fi

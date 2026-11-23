@@ -22,7 +22,7 @@ protocol=$(echo $protocol|tr '[:lower:]' '[:upper:]')
 iptables="/sbin/iptables"
 
 # Get vesta port by reading nginx.conf
-vestaport=$(grep 'listen' $VESTA/nginx/conf/nginx.conf | awk '{print $2}' | sed "s|;||")
+vestaport=$(awk '$1 == "listen" { sub(/;$/, "", $2); sub(/^.*:/, "", $2); print $2; exit }' "$VESTA/nginx/conf/nginx.conf")
 if [ -z "$vestaport" ]; then
     vestaport=8083
 fi

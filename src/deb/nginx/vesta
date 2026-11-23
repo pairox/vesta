@@ -42,12 +42,12 @@ start_php() {
 
 stop_nginx() {
     start-stop-daemon --stop --quiet --pidfile $NGINX_PID \
-        --retry 5 --oknodo --exec $NGINX_DAEMON
+        --retry 5 --oknodo --name $NGINX_NAME
 }
 
 stop_php() {
     start-stop-daemon --stop --quiet --pidfile $PHP_PID \
-        --retry 5 --oknodo --exec $PHP_DAEMON
+        --retry 5 --oknodo --name $PHP_NAME
 }
 
 case "$1" in

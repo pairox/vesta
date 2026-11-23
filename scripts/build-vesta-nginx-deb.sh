@@ -10,7 +10,7 @@ Build the bundled vesta-nginx Debian package.
 Options:
   --output DIR           Directory where the .deb file will be written
   --version VERSION      Override the package version
-  --nginx-version VER    Nginx source version to build (default: 1.24.0)
+  --nginx-version VER    Nginx source version to build (1.30.7 for Debian 12, 1.24.0 for legacy suites)
   --source-url URL       Source tarball URL
   -h, --help             Show this help
 USAGE
@@ -18,7 +18,16 @@ USAGE
 
 output_dir=""
 version_override="${VESTA_NGINX_DEB_VERSION:-}"
-nginx_version="${VESTA_NGINX_VERSION:-1.24.0}"
+default_version=1.24.0
+debian_release="${APT_DEBIAN_RELEASE:-}"
+if [[ -z "$debian_release" && -r /etc/debian_version ]]; then
+    read -r debian_release < /etc/debian_version
+    debian_release="${debian_release%%.*}"
+fi
+if [[ "$debian_release" == 12 ]]; then
+    default_version=1.30.7
+fi
+nginx_version="${VESTA_NGINX_VERSION:-$default_version}"
 source_url=""
 
 while [[ $# -gt 0 ]]; do
@@ -64,6 +73,9 @@ pkg_root="$work_dir/${package}_${version}_${architecture}"
 install -d "$source_dir" "$pkg_root/DEBIAN" "$output_dir"
 
 curl -fsSL "$source_url" -o "$work_dir/nginx.tar.gz"
+if [[ "${nginx_version}" == 1.30.7 ]]; then
+    printf '%s  %s\n' '2565b5c837050e958f70fb0f73c48e2bca4542ad349fd356f46fb0c72610bc6e' "$work_dir/nginx.tar.gz" | sha256sum --check
+fi
 tar -xzf "$work_dir/nginx.tar.gz" -C "$source_dir" --strip-components=1
 
 make_jobs="${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
@@ -84,6 +96,13 @@ install -D -m 0755 "$repo_root/src/deb/nginx/postrm" "$pkg_root/DEBIAN/postrm"
 install -D -m 0755 "$repo_root/src/deb/nginx/vesta" "$pkg_root/etc/init.d/vesta"
 install -D -m 0755 "$repo_root/src/rpm/conf/nginx.conf" "$pkg_root/usr/local/vesta/nginx/conf/nginx.conf"
 install -D -m 0755 "$pkg_root/usr/local/vesta/nginx/sbin/nginx" "$pkg_root/usr/local/vesta/nginx/sbin/vesta-nginx"
+
+if [[ "$nginx_version" == 1.30.7 ]]; then
+    install -m 0755 "$repo_root/src/deb/nginx/postinst-bookworm" "$pkg_root/DEBIAN/postinst"
+    install -D -m 0644 "$repo_root/src/deb/nginx/migrate-ssl.awk" "$pkg_root/usr/local/vesta/nginx/migrate-ssl.awk"
+    sed -i 's/^Depends: vesta$/Depends: vesta, libcrypt1, libpcre2-8-0, libssl3, zlib1g/' "$pkg_root/DEBIAN/control"
+    awk -f "$repo_root/src/deb/nginx/migrate-ssl.awk" "$repo_root/src/rpm/conf/nginx.conf" > "$pkg_root/usr/local/vesta/nginx/conf/nginx.conf"
+fi
 
 find "$pkg_root" -name '.DS_Store' -delete
 dpkg_deb_options=()

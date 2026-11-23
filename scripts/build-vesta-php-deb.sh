@@ -10,7 +10,7 @@ Build the bundled vesta-php Debian package.
 Options:
   --output DIR           Directory where the .deb file will be written
   --version VERSION      Override the package version
-  --php-version VER      PHP source version to build (default: 5.6.40)
+  --php-version VER      PHP source version to build (8.2.36 for Debian 12, 5.6.40 for legacy suites)
   --source-url URL       Source tarball URL
   -h, --help             Show this help
 USAGE
@@ -18,7 +18,16 @@ USAGE
 
 output_dir=""
 version_override="${VESTA_PHP_DEB_VERSION:-}"
-php_version="${VESTA_PHP_VERSION:-5.6.40}"
+default_version=5.6.40
+debian_release="${APT_DEBIAN_RELEASE:-}"
+if [[ -z "$debian_release" && -r /etc/debian_version ]]; then
+    read -r debian_release < /etc/debian_version
+    debian_release="${debian_release%%.*}"
+fi
+if [[ "$debian_release" == 12 ]]; then
+    default_version=8.2.36
+fi
+php_version="${VESTA_PHP_VERSION:-$default_version}"
 source_url=""
 
 while [[ $# -gt 0 ]]; do
@@ -64,41 +73,57 @@ pkg_root="$work_dir/${package}_${version}_${architecture}"
 install -d "$source_dir" "$pkg_root/DEBIAN" "$output_dir"
 
 curl -fsSL "$source_url" -o "$work_dir/php.tar.gz"
+if [[ "${php_version}" == 8.2.36 ]]; then
+    printf '%s  %s\n' 'c871dbdc1cd3d898e48632c8b5fcc73f1b0e1cbb15ef816579ced7f2ae1696a8' "$work_dir/php.tar.gz" | sha256sum --check
+fi
 tar -xzf "$work_dir/php.tar.gz" -C "$source_dir" --strip-components=1
 
-curl_include_dir=""
-for candidate in /usr/include/curl /usr/include/*/curl; do
-    if [[ -f "$candidate/easy.h" ]]; then
-        curl_include_dir="$candidate"
-        break
-    fi
-done
-if [[ -z "$curl_include_dir" ]]; then
-    echo "Cannot find curl/easy.h; install libcurl development headers." >&2
-    exit 1
-fi
-
-curl_prefix="$work_dir/curl-prefix"
-install -d "$curl_prefix/include"
-ln -s "$curl_include_dir" "$curl_prefix/include/curl"
-
 make_jobs="${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
-(
-    cd "$source_dir"
-    ./configure \
-        --prefix=/usr/local/vesta/php \
-        --with-zlib \
-        --enable-zip \
-        --enable-fpm \
-        --with-fpm-user=admin \
-        --with-fpm-group=admin \
-        --with-mysql=mysqlnd \
-        --with-mysqli=mysqlnd \
-        --with-curl="$curl_prefix" \
-        --enable-mbstring
-    make -j "$make_jobs" ZEND_EXTRA_LIBS='-lresolv'
-    make install INSTALL_ROOT="$pkg_root" INSTALLDIRS=vendor
-)
+if [[ "$php_version" == 8.2.36 ]]; then
+    (
+        cd "$source_dir"
+        ./configure --prefix=/usr/local/vesta/php \
+            --with-config-file-path=/usr/local/vesta/php/lib \
+            --enable-fpm --with-fpm-user=admin --with-fpm-group=admin \
+            --with-zlib --with-zip --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd \
+            --with-curl --with-openssl --enable-mbstring
+        make -j "$make_jobs"
+        make install INSTALL_ROOT="$pkg_root"
+    )
+else
+    curl_include_dir=""
+    for candidate in /usr/include/curl /usr/include/*/curl; do
+        if [[ -f "$candidate/easy.h" ]]; then
+            curl_include_dir="$candidate"
+            break
+        fi
+    done
+    if [[ -z "$curl_include_dir" ]]; then
+        echo "Cannot find curl/easy.h; install libcurl development headers." >&2
+        exit 1
+    fi
+
+    curl_prefix="$work_dir/curl-prefix"
+    install -d "$curl_prefix/include"
+    ln -s "$curl_include_dir" "$curl_prefix/include/curl"
+
+    (
+        cd "$source_dir"
+        ./configure \
+            --prefix=/usr/local/vesta/php \
+            --with-zlib \
+            --enable-zip \
+            --enable-fpm \
+            --with-fpm-user=admin \
+            --with-fpm-group=admin \
+            --with-mysql=mysqlnd \
+            --with-mysqli=mysqlnd \
+            --with-curl="$curl_prefix" \
+            --enable-mbstring
+        make -j "$make_jobs" ZEND_EXTRA_LIBS='-lresolv'
+        make install INSTALL_ROOT="$pkg_root" INSTALLDIRS=vendor
+    )
+fi
 
 awk -v version="$version" '
     /^Version:/ { print "Version: " version; next }
@@ -115,6 +140,14 @@ rm -rf \
     "$pkg_root/.depdblock" \
     "$pkg_root/.filemap" \
     "$pkg_root/.lock"
+
+if [[ "$php_version" == 8.2.36 ]]; then
+    for hook in preinst postinst; do
+        install -m 0755 "$repo_root/src/deb/php/${hook}-bookworm" "$pkg_root/DEBIAN/$hook"
+    done
+    printf '%s\n' /usr/local/vesta/php/lib/php.ini /usr/local/vesta/php/etc/php-fpm.conf > "$pkg_root/DEBIAN/conffiles"
+    sed -i 's/^Depends: vesta$/Depends: vesta, libcurl4, libonig5, libsqlite3-0, libssl3, libxml2, libzip4, zlib1g/' "$pkg_root/DEBIAN/control"
+fi
 
 find "$pkg_root" -name '.DS_Store' -delete
 dpkg_deb_options=()

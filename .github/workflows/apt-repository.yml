@@ -98,6 +98,7 @@ jobs:
                 apt-utils build-essential ca-certificates curl dpkg-dev \
                 libcurl4-openssl-dev libpcre3-dev libsqlite3-dev libssl-dev \
                 libxml2-dev libzip-dev pkg-config tar zlib1g-dev
+              if [ "$APT_DEBIAN_RELEASE" = 12 ]; then apt-get install -y --no-install-recommends libonig-dev libpcre2-dev; fi
               scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
               scripts/build-vesta-nginx-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
               scripts/build-vesta-php-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"

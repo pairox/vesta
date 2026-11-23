@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+[ "$1" = configure ] || exit 0
+
+nginx=/usr/local/vesta/nginx
+conf="$nginx/conf/nginx.conf"
+update-rc.d vesta defaults >/dev/null
+
+# On a new installation Vesta creates the certificate and admin account later.
+[ -n "${2:-}" ] || exit 0
+candidate=$(mktemp "$nginx/conf/.nginx.conf.XXXXXX")
+trap 'rm -f "$candidate"' EXIT
+cp -p "$conf" "$candidate"
+awk -f "$nginx/migrate-ssl.awk" "$conf" > "$candidate"
+"$nginx/sbin/vesta-nginx" -t -c "$candidate"
+if ! cmp -s "$conf" "$candidate"; then
+    mv -f "$candidate" "$conf"
+fi
+# If apt unpacked vesta-php in the same transaction, its postinst restarts both
+# daemons after configuring the matching loader.
+php_state=$(dpkg-query -W -f='${db:Status-Status}' vesta-php 2>/dev/null || true)
+if [ -s /run/vesta-nginx.pid ] && [ "$php_state" = installed ]; then
+    invoke-rc.d vesta restart
+fi
