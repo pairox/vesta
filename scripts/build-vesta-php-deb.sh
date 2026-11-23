@@ -145,6 +145,7 @@ if [[ "$php_version" == 8.2.36 ]]; then
     for hook in preinst postinst; do
         install -m 0755 "$repo_root/src/deb/php/${hook}-bookworm" "$pkg_root/DEBIAN/$hook"
     done
+    sed -i '/^Description:/i Pre-Depends: vesta-ioncube-php82 (>= 15.5.1-1+deb12)' "$pkg_root/DEBIAN/control"
     printf '%s\n' /usr/local/vesta/php/lib/php.ini /usr/local/vesta/php/etc/php-fpm.conf > "$pkg_root/DEBIAN/conffiles"
     sed -i 's/^Depends: vesta$/Depends: vesta, libcurl4, libonig5, libsqlite3-0, libssl3, libxml2, libzip4, zlib1g/' "$pkg_root/DEBIAN/control"
 fi

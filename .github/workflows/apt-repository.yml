@@ -22,6 +22,9 @@ on:
       - 'scripts/build-vesta-deb.sh'
       - 'scripts/build-vesta-nginx-deb.sh'
       - 'scripts/build-vesta-php-deb.sh'
+      - 'scripts/build-vesta-ioncube-deb.sh'
+      - 'src/deb/ioncube-php82/**'
+      - 'vendor/ioncube/**'
       - 'tools/ci-configure-debian-sources.sh'
       - 'src/deb/vesta/**'
       - 'src/deb/nginx/**'
@@ -101,6 +104,9 @@ jobs:
               if [ "$APT_DEBIAN_RELEASE" = 12 ]; then apt-get install -y --no-install-recommends libonig-dev libpcre2-dev; fi
               scripts/build-vesta-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
               scripts/build-vesta-nginx-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
+              if [ "$APT_DEBIAN_RELEASE" = 12 ]; then
+                scripts/build-vesta-ioncube-deb.sh --output "$APT_INPUT_DIR"
+              fi
               scripts/build-vesta-php-deb.sh --output "$APT_INPUT_DIR" --version "$APT_PACKAGE_VERSION"
             '
 

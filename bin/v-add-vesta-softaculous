@@ -74,10 +74,13 @@ if [ -d "/etc/sysconfig" ]; then
         check_result $? "vesta-ioncube package installation failed" $E_UPDATE
     fi
 else
-    dpkg -l vesta-ioncube |grep ^ii >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        apt-get -y install vesta-ioncube >/dev/null 2>&1
-        check_result $? "vesta-ioncube package installation failed" $E_UPDATE
+    ioncube_package=vesta-ioncube
+    if "$VESTA/php/bin/php" -n -r 'exit(PHP_MAJOR_VERSION === 8 && PHP_MINOR_VERSION === 2 ? 0 : 1);'; then
+        ioncube_package=vesta-ioncube-php82
+    fi
+    if [ "$(dpkg-query -W -f='${db:Status-Status}' "$ioncube_package" 2>/dev/null)" != installed ]; then
+        apt-get -y install "$ioncube_package" >/dev/null 2>&1
+        check_result $? "$ioncube_package package installation failed" $E_UPDATE
     fi
 fi
 

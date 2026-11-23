@@ -8,7 +8,7 @@ The Debian 12 build is available for `amd64` and uses the distribution's current
 
 The Bookworm packages build the panel binaries from Nginx 1.30.7 and PHP 8.2.36. The web stack used by hosted sites is managed separately. During an upgrade from the original standalone panel config, the package converts `ssl on;` to the SSL flag on the existing `listen` directive and checks the result before restarting Vesta. For custom configs with several server blocks, convert the old SSL directives manually before installing.
 
-If the panel already loads ionCube or has Softaculous installed, stage the Linux x86-64 PHP 8.2 Loader at `/usr/local/vesta/ioncube/ioncube_loader_lin_8.2.so` before installing `vesta-php`. The package checks that the new PHP can load it and updates the panel's `php.ini`. Test your installed Softaculous build with the new PHP and Loader on a copy before upgrading production, since encrypted files also have to support PHP 8.2.
+The Bookworm APT repository also includes `vesta-ioncube-php82`, which ships the original ionCube Loader and its license. APT installs it before configuring the PHP upgrade, and the installer checks that PHP can load it before restarting the panel. The separate package leaves the old PHP 5.6 loader package available for legacy systems. Test your installed Softaculous build on a copy before upgrading production, since its encrypted files also have to support PHP 8.2.
 
 ## Upgrade an existing installation
 

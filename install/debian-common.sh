@@ -50,6 +50,9 @@ vesta_debian_package_list() {
         db_packages="mysql-server mysql-common mysql-client"
     fi
     local base="nginx apache2 apache2-utils apache2-suexec-custom libapache2-mod-fcgid awstats webalizer vsftpd proftpd-basic bind9 exim4 exim4-daemon-heavy clamav-daemon spamassassin dovecot-imapd dovecot-pop3d roundcube-core roundcube-mysql roundcube-plugins postgresql postgresql-contrib phppgadmin phpmyadmin mc flex whois rssh git idn zip sudo bc ftp lsof ntpdate rrdtool quota bsdutils e2fsprogs curl ca-certificates openssl gnupg imagemagick fail2ban dnsutils bsdmainutils cron vesta vesta-nginx vesta-php expect libmail-dkim-perl unrar-free vim-common vesta-ioncube vesta-softaculous net-tools unzip iptables iptables-persistent"
+    if [ "$release" -eq 12 ]; then
+        base="${base/ vesta-ioncube / vesta-ioncube-php82 }"
+    fi
     if [ "$release" -ge 12 ]; then
         base="${base/ bsdmainutils / }"
         base="$base bsdextrautils nftables"

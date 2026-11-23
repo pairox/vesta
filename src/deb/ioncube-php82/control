@@ -1,0 +1,11 @@
+Package: vesta-ioncube-php82
+Version: 15.5.1-1+deb12
+Architecture: amd64
+Section: non-free/admin
+Priority: optional
+Maintainer: Vesta Control Panel
+Homepage: https://www.ioncube.com/loaders.php
+Depends: libc6
+Provides: vesta-ioncube
+Description: ionCube Loader for Vesta's PHP 8.2
+ Unmodified ionCube Loader for the bundled non-thread-safe PHP 8.2 runtime.
